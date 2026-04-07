@@ -217,25 +217,28 @@ impl ConvexHull {
     /// Check if an AABB is at least partially inside this convex hull
     pub fn contains_aabb(&self, aabb: &AABB) -> bool {
         for plane in &self.planes {
-            // Find the corner closest to the plane
+            // Find the p-vertex: the corner with the MAXIMUM projection along the
+            // plane normal (the corner closest to the positive/inside half-space).
+            // If even this corner is outside (negative distance), the entire AABB
+            // is outside this plane and can be culled.
             let test_point = [
                 if plane.normal[0] >= 0.0 {
-                    aabb.min[0]
-                } else {
                     aabb.max[0]
+                } else {
+                    aabb.min[0]
                 },
                 if plane.normal[1] >= 0.0 {
-                    aabb.min[1]
-                } else {
                     aabb.max[1]
+                } else {
+                    aabb.min[1]
                 },
                 if plane.normal[2] >= 0.0 {
-                    aabb.min[2]
-                } else {
                     aabb.max[2]
+                } else {
+                    aabb.min[2]
                 },
             ];
-            // If the closest corner is outside this plane, the AABB is outside
+            // If the p-vertex is outside this plane, the AABB is entirely outside
             if plane.distance_to_point(&test_point) < 0.0 {
                 return false;
             }
@@ -745,6 +748,13 @@ mod tests {
             max: [1.0, 1.0, -1.0],
         };
         assert!(!hull.contains_aabb(&behind));
+
+        // AABB that straddles the plane (partially inside) — must return true
+        let straddling = AABB {
+            min: [-1.0, -1.0, -2.0],
+            max: [1.0, 1.0, 2.0],
+        };
+        assert!(hull.contains_aabb(&straddling));
     }
 
     #[test]
