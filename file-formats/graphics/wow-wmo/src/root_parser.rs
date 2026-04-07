@@ -66,8 +66,11 @@ pub struct WmoRoot {
     pub lights: Vec<MoltEntry>,
     /// Doodad sets (MODS)
     pub doodad_sets: Vec<ModsEntry>,
-    /// Doodad names (MODN)
+    /// Doodad names (MODN) — sequential list.
     pub doodad_names: Vec<String>,
+    /// Maps byte offset within the MODN blob to the name at that offset.
+    /// Use this to resolve `ModdEntry::name_index()`.
+    pub doodad_name_by_offset: HashMap<u32, String>,
     /// Doodad definitions (MODD)
     pub doodad_defs: Vec<ModdEntry>,
     /// Fog definitions (MFOG)
@@ -155,6 +158,7 @@ pub fn parse_root_file<R: Read + Seek>(
         lights: Vec::new(),
         doodad_sets: Vec::new(),
         doodad_names: Vec::new(),
+        doodad_name_by_offset: HashMap::new(),
         doodad_defs: Vec::new(),
         fogs: Vec::new(),
         convex_volume_planes: Vec::new(),
@@ -284,6 +288,7 @@ pub fn parse_root_file<R: Read + Seek>(
                 reader.read_exact(&mut data)?;
                 let modn = Modn::parse(&data)?;
                 root.doodad_names = modn.names;
+                root.doodad_name_by_offset = modn.name_by_offset;
             }
             "MODD" => {
                 // Read doodad definitions
