@@ -374,14 +374,26 @@ impl McnkChunk {
             let _chunk_header = ChunkHeader::read_le(reader)?;
 
             // Read the actual data using size_liquid from MCNK header
-            let mut data = vec![0u8; header.size_liquid as usize];
+            // size_liquid includes the 8-byte chunk header, so subtract that
+            let data_size = header.size_liquid.saturating_sub(8) as usize;
+            let mut data = vec![0u8; data_size];
             reader.read_exact(&mut data)?;
 
             if !data.is_empty() {
                 // Pass MCNK flags to MCLQ parser for liquid type detection
-                // Note: Small MCLQ chunks (8 bytes) are often corrupted/empty placeholders
-                // We catch parsing errors and treat them as "no liquid"
-                MclqChunk::read_le_args(&mut std::io::Cursor::new(data), header.flags.value).ok() // Silently skip corrupted/placeholder chunks
+                // Log failures so we can diagnose why chunks with liquid flags have no data
+                match MclqChunk::read_le_args(&mut std::io::Cursor::new(data), header.flags.value) {
+                    Ok(mclq) => Some(mclq),
+                    Err(e) => {
+                        log::warn!(
+                            "MCLQ parse failed for MCNK flags=0x{:x} size_liquid={}: {:?}",
+                            header.flags.value,
+                            header.size_liquid,
+                            e
+                        );
+                        None
+                    }
+                }
             } else {
                 None
             }

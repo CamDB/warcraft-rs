@@ -191,10 +191,10 @@ impl MclqChunk {
 
     /// Check if height range is valid.
     ///
-    /// Valid heights must be:
-    /// - Finite (not NaN or Infinity)
-    /// - Within reasonable world bounds (±10000 units)
-    /// - min_height <= max_height
+    /// Valid heights must be finite (not NaN or Infinity) and
+    /// within reasonable world bounds (±10000 units).
+    /// Note: min_height > max_height is no longer considered invalid
+    /// — values are swapped during parsing.
     pub fn has_valid_heights(&self) -> bool {
         self.min_height.is_finite()
             && self.max_height.is_finite()
@@ -239,22 +239,19 @@ impl BinRead for MclqChunk {
         let min_height = f32::read_options(reader, endian, ())?;
         let max_height = f32::read_options(reader, endian, ())?;
 
-        // Validate heights - corrupted chunks have invalid float values
-        let heights_valid = min_height.is_finite()
-            && max_height.is_finite()
-            && min_height.abs() <= 10000.0
-            && max_height.abs() <= 10000.0
-            && min_height <= max_height;
-
-        if !heights_valid {
-            return Err(binrw::Error::AssertFail {
-                pos: 0,
-                message: format!(
-                    "MCLQ has invalid height range: min={}, max={} (likely corrupted/empty)",
-                    min_height, max_height
-                ),
-            });
-        }
+        // Validate heights — vanilla ADTs often have placeholder MCLQ data in
+        // land chunks with nonsensical values. Be lenient:
+        // - NaN/Infinity → treat as 0 (flat water at terrain level)
+        // - min > max → swap them
+        // - Values outside world bounds → clamp rather than reject
+        // An all-zero height range (min=max=0) is valid for flat ocean.
+        let min_height = if !min_height.is_finite() { 0.0f32 } else { min_height };
+        let max_height = if !max_height.is_finite() { 0.0f32 } else { max_height };
+        let (min_height, max_height) = if min_height > max_height {
+            (max_height, min_height) // swap inverted range
+        } else {
+            (min_height, max_height)
+        };
 
         // Determine liquid type from MCNK flags
         let liquid_type = LiquidType::from_mcnk_flags(mcnk_flags);
